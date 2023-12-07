@@ -59,6 +59,7 @@ currentURL = getTrueURL(requestedURL)
 newURL = currentURL
 
 width, height = pyautogui.size()
+regex = re.compile(r'((\d+) \| Chapter (\d+) - (.*)( - MangaDex))')
 
 torDriver.get(requestedURL)
 
@@ -77,16 +78,16 @@ while True:
         retries += 1
     else:
         pageTitle = torDriver.title
-        sep1 = pageTitle.find('|')
-        pageNumber = int(pageTitle[:sep1])
-        sep2 = pageTitle.find('-')
-        chapterInfo = pageTitle[sep1 + 1:sep2].strip()
-        _, chapterNumber = chapterInfo.split()
-        chapterNumber = int(chapterNumber)
-        directoryPath = Path.home() / 'Downloads' / 'Chapter {:03d}'.format(chapterNumber)
-        Path.mkdir(directoryPath, exist_ok=True)
+        titleComponents = list(regex.search(pageTitle).groups())
+        if titleComponents:
+            pageNumber, chapterNumber, mangaName = int(titleComponents[1]), int(titleComponents[2]), titleComponents[3]
+        else:
+            print('downloading manga finished! exiting')
+            break;                                              # Adding preceding zeroes can be variable
+        directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:01d}'.format(chapterNumber)
+        Path.mkdir(directoryPath, exist_ok=True, parents=True)
 
-        pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber - 1) #! For Tokyo ghoul
+        pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber) #! For Tokyo ghoul
         pyautogui.moveTo(width / 2, height / 2)
         time.sleep(0.125)
         pyautogui.rightClick()
