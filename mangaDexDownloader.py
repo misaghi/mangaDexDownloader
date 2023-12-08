@@ -59,7 +59,7 @@ currentURL = getTrueURL(requestedURL)
 newURL = currentURL
 
 width, height = pyautogui.size()
-regex = re.compile(r'((\d+) \| Chapter (\d+) - (.*)( - MangaDex))')
+regex = re.compile(r'((\d+) \| Chapter (\d+(\.\d+)?) - (.*)( - MangaDex))')
 
 torDriver.get(requestedURL)
 
@@ -78,9 +78,10 @@ while True:
         retries += 1
     else:
         pageTitle = torDriver.title
-        titleComponents = list(regex.search(pageTitle).groups())
-        if titleComponents[0]:
-            pageNumber, chapterNumber, mangaName = int(titleComponents[1]), int(titleComponents[2]), titleComponents[3]
+        titleComponents = regex.search(pageTitle)
+        if titleComponents:
+            titleComponents = list(titleComponents.groups())
+            pageNumber, chapterNumber, mangaName = int(titleComponents[1]), int(titleComponents[2]), titleComponents[4]
         else:
             print('downloading manga finished! exiting')
             break;                                              # Adding preceding zeroes can be variable
