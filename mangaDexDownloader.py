@@ -79,15 +79,15 @@ while True:
     else:
         pageTitle = torDriver.title
         titleComponents = list(regex.search(pageTitle).groups())
-        if titleComponents:
+        if titleComponents[0]:
             pageNumber, chapterNumber, mangaName = int(titleComponents[1]), int(titleComponents[2]), titleComponents[3]
         else:
             print('downloading manga finished! exiting')
             break;                                              # Adding preceding zeroes can be variable
-        directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:01d}'.format(chapterNumber)
+        directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:02d}'.format(chapterNumber)
         Path.mkdir(directoryPath, exist_ok=True, parents=True)
 
-        pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber) #! For Tokyo ghoul
+        pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber)
         pyautogui.moveTo(width / 2, height / 2)
         time.sleep(0.125)
         pyautogui.rightClick()
