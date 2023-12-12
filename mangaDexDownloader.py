@@ -15,6 +15,7 @@ MAXRETRIES = 3
 RETRY = 'retry'
 REFRESH = 'refresh'
 TIMEOUT = 60
+MAXARGS = 2
 
 def getTrueURL(url):
     return url[:url.find('/', len(requestedURL) - 4)]
@@ -34,6 +35,7 @@ def errorHandling(type):
             time.sleep(0.125)
             pyautogui.click()
         else: # For some reason retry button wasn't appeared or maybe the page's loading was too long
+            print('error was encountered loading the page; refreshing')
             torDriver.refresh()
 
     elif type == REFRESH:
@@ -43,12 +45,19 @@ def errorHandling(type):
     else:
         print('passed error type is unknown')
 
+def downloadFinished():
+    titleComponents = regex.search(torDriver.title)
+    if titleComponents:
+        return False
+    else:
+        return True
+
 torDriver = tbdriver.TorBrowserDriver(Path.home() / 'tor-browser')
 torDriver.maximize_window()
 
-if len(sys.argv) == 2:
+if len(sys.argv) == MAXARGS:
     _, requestedURL = sys.argv
-elif len(sys.argv) > 2:
+elif len(sys.argv) > MAXARGS:
     print('too many arguments!')
     exit()
 else:
@@ -59,7 +68,7 @@ currentURL = getTrueURL(requestedURL)
 newURL = currentURL
 
 width, height = pyautogui.size()
-regex = re.compile(r'((\d+) \| Chapter (\d+(\.\d+)?) - (.*)( - MangaDex))')
+regex = re.compile(r'((\d+) \| Chapter ((\d+)(\.\d+)?) - (.*)( - MangaDex))')
 
 torDriver.get(requestedURL)
 
@@ -68,24 +77,32 @@ while True:
     try:
         tbdriver.WebDriverWait(torDriver, TIMEOUT).until(EC.visibility_of_any_elements_located((By.XPATH, IMAGEXPATH)))
     except TimeoutException:
+        if downloadFinished():
+            print('downloading manga finished! exiting')
+            break
         if retries < MAXRETRIES:
             errorHandling(RETRY)
         elif retries == MAXRETRIES:
             errorHandling(REFRESH)
         elif retries == MAXRETRIES + 1:
             print('error was encountered loading the page, and couldn\'t be fixed. exiting')
-            break;
+            break
         retries += 1
     else:
         pageTitle = torDriver.title
         titleComponents = regex.search(pageTitle)
         if titleComponents:
             titleComponents = list(titleComponents.groups())
-            pageNumber, chapterNumber, mangaName = int(titleComponents[1]), int(titleComponents[2]), titleComponents[4]
+            pageNumber, chapterNumber, fraction, mangaName = int(titleComponents[1]), int(titleComponents[3])\
+                , titleComponents[4], titleComponents[5]
         else:
             print('downloading manga finished! exiting')
-            break;                                              # Adding preceding zeroes can be variable
-        directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:02d}'.format(chapterNumber)
+            break;
+        # Chapter's number is a floating point number
+        if fraction:                                                 # Adding preceding zeroes can be variable
+            directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:02d}{}'.format(chapterNumber, fraction)
+        else:
+            directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:02d}'.format(chapterNumber)
         Path.mkdir(directoryPath, exist_ok=True, parents=True)
 
         pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber)
