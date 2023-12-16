@@ -68,7 +68,16 @@ currentURL = getTrueURL(requestedURL)
 newURL = currentURL
 
 width, height = pyautogui.size()
-regex = re.compile(r'((\d+) \| Chapter ((\d+)(\.\d+)?) - (.*)( - MangaDex))')
+regex = re.compile(r'''                     # 1st group: The whole match
+                   ((\d+)                   # 2nd group: Chapter page number
+                   [ ]\|[ ]                 # Seperator
+                   (Chapter|[\w ]*)         # 3rd group: Chapter or other replacements
+                   ([ ](\d+)(\.\d+)?)?      # 4th, 5th, 6th group: Chapter's number, decimal part, fraction part
+                   [ ]-[ ]                  # Seperator
+                   (.*)                     # 7th group: Title of the manga
+                   ([ ]-[ ]MangaDex))       # 8th group: MangaDex 
+                   ''',
+                   re.VERBOSE)
 
 torDriver.get(requestedURL)
 
@@ -93,16 +102,18 @@ while True:
         titleComponents = regex.search(pageTitle)
         if titleComponents:
             titleComponents = list(titleComponents.groups())
-            pageNumber, chapterNumber, fraction, mangaName = int(titleComponents[1]), int(titleComponents[3])\
-                , titleComponents[4], titleComponents[5]
+            pageNumber, chapterTitle, chapterNumber, fraction, mangaName = int(titleComponents[1]), titleComponents[2]\
+                , int(titleComponents[4]), titleComponents[5], titleComponents[6]
         else:
             print('downloading manga finished! exiting')
             break;
         # Chapter's number is a floating point number
         if fraction:                                                 # Adding preceding zeroes can be variable
-            directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:02d}{}'.format(chapterNumber, fraction)
+            directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}{}'.format(
+                chapterTitle, chapterNumber, fraction
+                )
         else:
-            directoryPath = Path.home() / 'Downloads' / mangaName / 'Chapter {:02d}'.format(chapterNumber)
+            directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}'.format(chapterTitle, chapterNumber)
         Path.mkdir(directoryPath, exist_ok=True, parents=True)
 
         pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber)
