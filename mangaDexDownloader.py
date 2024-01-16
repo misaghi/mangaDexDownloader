@@ -1,6 +1,6 @@
-from tbselenium import tbdriver
+from tbselenium import tbdriver # TODO Handling gap between chapters needs to be handled. Use Fate Extra FoxTail
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from pathlib import Path
 import pyautogui
@@ -11,9 +11,11 @@ import re
 
 IMAGEXPATH = "/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/img"
 ERRORXPATH = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/div'
+GAPCONTBUTPATH = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[3]/div[1]/div[2]/div/div[3]/button[2]'
 MAXRETRIES = 3
 RETRY = 'retry'
 REFRESH = 'refresh'
+GAP = 'gap'
 TIMEOUT = 60
 MAXARGS = 2
 
@@ -23,31 +25,49 @@ def getTrueURL(url):
 def errorHandling(type):
     if type == RETRY:
         try:
-            torDriver.find_element(By.XPATH, ERRORXPATH)
-        except Exception:
+            errorElement = tbdriver.WebDriverWait(torDriver, TIMEOUT).until(EC.visibility_of_element_located((By.XPATH, ERRORXPATH)))
+        except TimeoutException:
             error = False
         else:
-            error = True
+            if errorElement.text == 'CLICK TO RETRY':
+                error = True
+            else:
+                error = False
 
         if error:
             print('error was encountered loading the page; retrying')
-            pyautogui.moveTo(width / 2, height / 2)
+            # pyautogui.moveTo(width / 2, height / 2)
             time.sleep(0.125)
-            pyautogui.click()
-        else: # For some reason retry button wasn't appeared or maybe the page's loading was too long
-            print('error was encountered loading the page; refreshing')
-            torDriver.refresh()
+            # pyautogui.click()
+            errorElement.click()
+        # else: # For some reason retry button wasn't appeared or maybe the page's loading was too long
+        #     print('error was encountered loading the page; refreshing')
+        #     torDriver.refresh()
+        else:
+            # NOTE: Refreshing the page was not a good idea. The page has more time for loading in this approach
+            pass
 
     elif type == REFRESH:
-        print('error was encountered loading the page; this is the last try.')
-        print('refreshing the page is in progress')
+        print('error was encountered loading the page; refreshing')
         torDriver.refresh()
+    elif type == GAP:
+        gapElement = torDriver.find_element(By.XPATH, GAPCONTBUTPATH)
+        time.sleep(0.125)
+        gapElement.click()
     else:
         print('passed error type is unknown')
 
 def downloadFinished():
     titleComponents = regex.search(torDriver.title)
     if titleComponents:
+        return False
+    else:
+        return True
+    
+def gapExists():
+    try:
+        torDriver.find_element(By.XPATH, GAPCONTBUTPATH)
+    except NoSuchElementException:
         return False
     else:
         return True
@@ -61,7 +81,7 @@ elif len(sys.argv) > MAXARGS:
     print('too many arguments!')
     exit()
 else:
-    print('too few arguments!')
+    print('not enough arguments!')
     exit()
 
 currentURL = getTrueURL(requestedURL)
@@ -81,22 +101,31 @@ regex = re.compile(r'''                     # 1st group: The whole match
 
 torDriver.get(requestedURL)
 
+retries = 0
+multiplier = 1
 while True:
-    retries = 0
+    if gapExists():
+        errorHandling(GAP)
+        continue
     try:
-        tbdriver.WebDriverWait(torDriver, TIMEOUT).until(EC.visibility_of_any_elements_located((By.XPATH, IMAGEXPATH)))
+        tbdriver.WebDriverWait(torDriver, TIMEOUT * multiplier).until(
+            EC.visibility_of_any_elements_located((By.XPATH, IMAGEXPATH))
+            )
     except TimeoutException:
         if downloadFinished():
             print('downloading manga finished! exiting')
             break
+
         if retries < MAXRETRIES:
             errorHandling(RETRY)
         elif retries == MAXRETRIES:
-            errorHandling(REFRESH)
-        elif retries == MAXRETRIES + 1:
+            print(f'error was encountered {MAXRETRIES} loading the page; this is the last retry')
+            errorHandling(RETRY)
+        elif retries > MAXRETRIES:
             print('error was encountered loading the page, and couldn\'t be fixed. exiting')
             break
         retries += 1
+        multiplier += .5
     else:
         pageTitle = torDriver.title
         titleComponents = regex.search(pageTitle)
@@ -152,3 +181,5 @@ while True:
         pyautogui.click()
         newURL = getTrueURL(torDriver.current_url)
         pyperclip.copy(newURL)
+        retries = 0
+        multiplier = 1
