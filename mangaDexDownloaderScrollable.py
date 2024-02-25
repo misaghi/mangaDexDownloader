@@ -1,6 +1,6 @@
 from tbselenium import tbdriver # TODO Handling gap between chapters needs to be handled. Use Fate Extra FoxTail
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException, WebDriverException
 from selenium.webdriver.common.by import By
 from pathlib import Path
 import pyautogui
@@ -9,9 +9,10 @@ import pyperclip
 import sys
 import re
 
-IMAGEXPATH = "/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/img"
+IMAGESXPATH = "/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/div/img"
 ERRORXPATH = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/div'
 GAPCONTBUTPATH = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[3]/div[1]/div[2]/div/div[3]/button[2]'
+NEXTCHAP = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[4]/a'
 RETRY = 'retry'
 REFRESH = 'refresh'
 GAP = 'gap'
@@ -25,41 +26,32 @@ def errorHandling(type):
     """
     This method handles various kinds of errors which might happen during script's execution.
     Handled errors:
-    1. RETRY: Clicking on the retry button.
+    1. RETRY: Clicking on the retry button(s).
     2. REFRESH: Refreshing the whole web page.
     3. GAP: Skipping to next chapter in case of encountering a gap.
     """
     if type == RETRY:
-        try:
-            errorElement = tbdriver.WebDriverWait(torDriver, TIMEOUT).until(EC.visibility_of_element_located((By.XPATH, ERRORXPATH)))
-        except TimeoutException:
-            error = False
-        else:
-            if errorElement.text.lower() == 'click to retry':
-                error = True
-            else:
-                error = False
-
-        if error:
-            print('error was encountered loading the page; retrying')
-            time.sleep(0.125)
-            errorElement.click()
-        else:
-            # NOTE: Refreshing the page was not a good idea. The page has more time for loading in this approach
-            pass
+        for possibleError in possibleErrors:
+            try:
+                if possibleError.text.lower() == 'click to retry':
+                    print('error was encountered loading the page; retrying')
+                    possibleError.location_once_scrolled_into_view
+                    time.sleep(0.125)
+                    possibleError.click()
+            except StaleElementReferenceException:
+                pass
 
     elif type == REFRESH:
         print('error was encountered loading the page; refreshing')
         torDriver.refresh()
     elif type == GAP:
-        print('gap was found; skipping to next chapter')
         gapElement = torDriver.find_element(By.XPATH, GAPCONTBUTPATH)
         time.sleep(0.125)
         gapElement.click()
     else:
         print('passed error type is unknown')
 
-def downloadFinished(): # TODO Must be updated
+def downloadFinished():
     """
     Checks if download is finished or not by using that web page's title (P.S. I know it's not a reliable approach)
     """
@@ -124,7 +116,7 @@ loadingTitleRegex = re.compile(r'''
                                 ''',
                                 re.VERBOSE)
 
-while True: # Retry on connection has timed out error
+while True:
     try:
         torDriver.get(requestedURL)
     except WebDriverException:
@@ -138,9 +130,13 @@ while True:
         errorHandling(GAP)
         continue
     try:
-        tbdriver.WebDriverWait(torDriver, TIMEOUT).until(
-            EC.visibility_of_any_elements_located((By.XPATH, IMAGEXPATH))
+        pages = tbdriver.WebDriverWait(torDriver, TIMEOUT).until(
+            EC.visibility_of_all_elements_located((By.XPATH, IMAGESXPATH))
             )
+
+        possibleErrors = tbdriver.WebDriverWait(torDriver, 1).until( # No need for more waiting here
+            EC.visibility_of_all_elements_located((By.XPATH, ERRORXPATH))
+        )
     except TimeoutException:
         if downloadFinished():
             print('downloading manga finished! exiting')
@@ -149,17 +145,20 @@ while True:
             print('stuck in loading; refreshing')
             errorHandling(REFRESH)
             continue
-        else:
-            errorHandling(RETRY)
 
     else:
+        if len(pages) < len(possibleErrors):
+            time.sleep(TIMEOUT) # Some extra delay here to load completely
+            errorHandling(RETRY)
+            continue # Errors were incountered, and we are going to start over
+
         pageTitle = torDriver.title
         titleComponents = regex.search(pageTitle)
         if titleComponents:
             titleComponents = list(titleComponents.groups())
             pageNumber, chapterTitle, chapterNumber, fraction, mangaName = int(titleComponents[1]), titleComponents[2]\
                 , int(titleComponents[4]), titleComponents[5], titleComponents[6]
-            
+
         # Chapter's number is a floating point number
         if fraction:                                                 # Adding preceding zeroes can be variable
             directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}{}'.format(
@@ -169,39 +168,46 @@ while True:
             directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}'.format(chapterTitle, chapterNumber)
         Path.mkdir(directoryPath, exist_ok=True, parents=True)
 
-        pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber)
-        pyautogui.moveTo(width / 2, height / 2)
-        time.sleep(0.125)
-        pyautogui.rightClick()
-        time.sleep(0.125)
-        pyautogui.press('down')
-        time.sleep(0.125)
-        pyautogui.press('down')
-        time.sleep(0.125)
-        pyautogui.press('enter') # Save image
-        time.sleep(0.125)
-        pyperclip.copy(pathToSaveImage.__str__())
-        pyautogui.moveTo(228, 52) # Address bar
-        time.sleep(0.125)
-        pyautogui.doubleClick()
-        time.sleep(0.125)
-        pyautogui.rightClick()
-        time.sleep(0.125)
-        pyautogui.press('down')
-        time.sleep(0.125)
-        pyautogui.press('down')
-        time.sleep(0.125)
-        pyautogui.press('down')
-        time.sleep(0.125)
-        pyautogui.press('enter') # Paste path to save image
-        time.sleep(0.125)
-        pyautogui.moveTo(1792, 1056)
-        time.sleep(0.125)
-        pyautogui.click()
-        time.sleep(0.125)
+        for page in pages:
+            pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber)
+                                    
+            page.location_once_scrolled_into_view
 
-        pyautogui.moveTo((width / 4) * 3, height / 2)
-        time.sleep(0.125)
-        pyautogui.click()
+            pyautogui.moveTo(width / 2, height / 2)
+            time.sleep(0.125)
+            pyautogui.rightClick()
+            time.sleep(0.125)
+            pyautogui.press('down')
+            time.sleep(0.125)
+            pyautogui.press('down')
+            time.sleep(0.125)
+            pyautogui.press('enter') # Save image
+            time.sleep(0.125)
+            pyperclip.copy(pathToSaveImage.__str__())
+            pyautogui.moveTo(228, 52) # Address bar
+            time.sleep(0.125)
+            pyautogui.doubleClick()
+            time.sleep(0.125)
+            pyautogui.rightClick()
+            time.sleep(0.125)
+            pyautogui.press('down')
+            time.sleep(0.125)
+            pyautogui.press('down')
+            time.sleep(0.125)
+            pyautogui.press('down')
+            time.sleep(0.125)
+            pyautogui.press('enter') # Paste path to save image
+            time.sleep(0.125)
+            pyautogui.moveTo(1792, 1056)
+            time.sleep(0.125)
+            pyautogui.click()
+            time.sleep(0.125)
+        
+            pageNumber += 1
+
+        nextChapterButton = torDriver.find_element(By.XPATH, NEXTCHAP)
+        nextChapterButton.location_once_scrolled_into_view
+        nextChapterButton.click()
+
         newURL = getTrueURL(torDriver.current_url)
         pyperclip.copy(newURL)
