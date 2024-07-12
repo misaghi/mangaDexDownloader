@@ -1,4 +1,4 @@
-from tbselenium import tbdriver # TODO Handling gap between chapters needs to be handled. Use Fate Extra FoxTail
+from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 from selenium.webdriver.common.by import By
@@ -9,17 +9,20 @@ import pyperclip
 import sys
 import re
 
-IMAGEXPATH = "/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/img"
-ERRORXPATH = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[1]/div[2]/div[1]/div/div'
-GAPCONTBUTPATH = '/html/body/div[1]/div[1]/div[2]/div[2]/div/div[3]/div[1]/div[2]/div/div[3]/button[2]'
+IMAGEXPATH = "/html/body/div[1]/div[1]/div[2]/div[3]/div/div[1]/div[2]/div[1]/div/img"
+ERRORXPATH = '/html/body/div[1]/div[1]/div[2]/div[3]/div/div[1]/div[2]/div[1]/div/div'
+GAPCONTBUTPATH = '/html/body/div[1]/div[1]/div[2]/div[3]/div/div[3]/div[1]/div[2]/div/div[3]/button[2]'
+ADDTOLIB = '/html/body/div[1]/div[1]/div[2]/div[3]/div/div[5]/div/button[1]/span'
 RETRY = 'retry'
 REFRESH = 'refresh'
 GAP = 'gap'
 TIMEOUT = 60
-MAXARGS = 2
+MAXARGS = 3
+
 
 def getTrueURL(url):
     return url[:url.find('/', len(requestedURL) - 4)]
+
 
 def errorHandling(type):
     """
@@ -31,7 +34,8 @@ def errorHandling(type):
     """
     if type == RETRY:
         try:
-            errorElement = tbdriver.WebDriverWait(torDriver, TIMEOUT).until(EC.visibility_of_element_located((By.XPATH, ERRORXPATH)))
+            errorElement = WebDriverWait(driver, TIMEOUT).until(
+                EC.visibility_of_element_located((By.XPATH, ERRORXPATH)))
         except TimeoutException:
             error = False
         else:
@@ -50,57 +54,72 @@ def errorHandling(type):
 
     elif type == REFRESH:
         print('error was encountered loading the page; refreshing')
-        torDriver.refresh()
+        driver.refresh()
     elif type == GAP:
         print('gap was found; skipping to next chapter')
-        gapElement = torDriver.find_element(By.XPATH, GAPCONTBUTPATH)
+        gapElement = driver.find_element(By.XPATH, GAPCONTBUTPATH)
         time.sleep(0.125)
         gapElement.click()
     else:
         print('passed error type is unknown')
 
-def downloadFinished(): # TODO Must be updated
+
+def downloadFinished():
     """
-    Checks if download is finished or not by using that web page's title (P.S. I know it's not a reliable approach)
+    Checks if download is finished or not by checking 'Add to Library' button at manga's main page
     """
-    titleComponents = regex.search(torDriver.title) # TODO Loading... - MangaDex
-    if titleComponents:
+    try:
+        driver.find_element(By.XPATH, ADDTOLIB)
+    except NoSuchElementException:
         return False
     else:
+        print('downloading manga finished! exiting')
         return True
-    
+
+
 def stuckInLoading():
     """
-    Reloads the page in case of page half loads
+    Sometimes web pages aren't load correctly. This method checks for mentioned cases
     """
-    titleComponents = loadingTitleRegex.search(torDriver.title)
-    if titleComponents:
-        return True
-    else:
+    pageTitle = driver.title
+    if regex.search(pageTitle):
         return False
-    
+    else:
+        return True
+
+
 def gapExists():
     """
     Checks for gap between chapters
     """
     try:
-        torDriver.find_element(By.XPATH, GAPCONTBUTPATH)
+        driver.find_element(By.XPATH, GAPCONTBUTPATH)
     except NoSuchElementException:
         return False
     else:
         return True
 
-torDriver = tbdriver.TorBrowserDriver(Path.home() / 'tor-browser')
-torDriver.maximize_window()
 
 if len(sys.argv) == MAXARGS:
-    _, requestedURL = sys.argv
+    _, browser, requestedURL = sys.argv
 elif len(sys.argv) > MAXARGS:
     print('too many arguments!')
     exit()
 else:
     print('not enough arguments!')
     exit()
+
+if browser.lower() == 'tor':
+    from tbselenium import tbdriver
+    driver = tbdriver.TorBrowserDriver(Path.home() / 'tor-browser')
+elif browser.lower() == 'firefox':
+    from selenium.webdriver import Firefox
+    driver = Firefox()
+else:
+    print('browser must be either tor or firefox. exiting...')
+    exit()
+
+driver.maximize_window()
 
 currentURL = getTrueURL(requestedURL)
 newURL = currentURL
@@ -117,16 +136,10 @@ regex = re.compile(r'''                     # 1st group: The whole match
                    ''',
                    re.VERBOSE)
 
-loadingTitleRegex = re.compile(r'''
-                                Loading\.\.\.
-                               [ ]-[ ]
-                               MangaDex
-                                ''',
-                                re.VERBOSE)
 
-while True: # Retry on connection has timed out error
+while True:  # Retry on connection has timed out error
     try:
-        torDriver.get(requestedURL)
+        driver.get(requestedURL)
     except WebDriverException:
         print('connection has timed out; reloading')
         continue
@@ -137,36 +150,44 @@ while True:
     if gapExists():
         errorHandling(GAP)
         continue
+    elif downloadFinished():
+        break
     try:
-        tbdriver.WebDriverWait(torDriver, TIMEOUT).until(
+        WebDriverWait(driver, TIMEOUT).until(
             EC.visibility_of_any_elements_located((By.XPATH, IMAGEXPATH))
-            )
+        )
     except TimeoutException:
-        if downloadFinished():
-            print('downloading manga finished! exiting')
-            break
-        elif stuckInLoading():
-            print('stuck in loading; refreshing')
+        if stuckInLoading():
             errorHandling(REFRESH)
-            continue
         else:
             errorHandling(RETRY)
-
+    except WebDriverException:
+        errorHandling(REFRESH)
     else:
-        pageTitle = torDriver.title
+        pageTitle = driver.title
         titleComponents = regex.search(pageTitle)
         if titleComponents:
             titleComponents = list(titleComponents.groups())
-            pageNumber, chapterTitle, chapterNumber, fraction, mangaName = int(titleComponents[1]), titleComponents[2]\
-                , int(titleComponents[4]), titleComponents[5], titleComponents[6]
-            
-        # Chapter's number is a floating point number
-        if fraction:                                                 # Adding preceding zeroes can be variable
-            directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}{}'.format(
-                chapterTitle, chapterNumber, fraction
+            pageNumber, chapterTitle, fraction, mangaName = int(
+                titleComponents[1]), titleComponents[2], titleComponents[5], titleComponents[6]
+            try:
+                chapterNumber = int(titleComponents[4])
+            except TypeError:
+                print("chapter doesn't have any numbers")
+                chapterNumber = ''
+
+        if chapterNumber:
+            # Chapter's number is a floating point number
+            if fraction:                                                 # Adding preceding zeroes can be variable
+                directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}{}'.format(
+                    chapterTitle, chapterNumber, fraction
                 )
+            else:
+                directoryPath = Path.home() / 'Downloads' / mangaName / \
+                    '{} {:02d}'.format(chapterTitle, chapterNumber)
         else:
-            directoryPath = Path.home() / 'Downloads' / mangaName / '{} {:02d}'.format(chapterTitle, chapterNumber)
+            directoryPath = Path.home() / 'Downloads' / mangaName / '{}'.format(chapterTitle)
+
         Path.mkdir(directoryPath, exist_ok=True, parents=True)
 
         pathToSaveImage = directoryPath / '{:02d}'.format(pageNumber)
@@ -178,10 +199,10 @@ while True:
         time.sleep(0.125)
         pyautogui.press('down')
         time.sleep(0.125)
-        pyautogui.press('enter') # Save image
+        pyautogui.press('enter')  # Save image
         time.sleep(0.125)
         pyperclip.copy(pathToSaveImage.__str__())
-        pyautogui.moveTo(228, 52) # Address bar
+        pyautogui.moveTo(228, 52)  # Address bar
         time.sleep(0.125)
         pyautogui.doubleClick()
         time.sleep(0.125)
@@ -193,7 +214,7 @@ while True:
         time.sleep(0.125)
         pyautogui.press('down')
         time.sleep(0.125)
-        pyautogui.press('enter') # Paste path to save image
+        pyautogui.press('enter')  # Paste path to save image
         time.sleep(0.125)
         pyautogui.moveTo(1792, 1056)
         time.sleep(0.125)
@@ -203,5 +224,5 @@ while True:
         pyautogui.moveTo((width / 4) * 3, height / 2)
         time.sleep(0.125)
         pyautogui.click()
-        newURL = getTrueURL(torDriver.current_url)
+        newURL = getTrueURL(driver.current_url)
         pyperclip.copy(newURL)
