@@ -200,12 +200,18 @@ while True:
             pyautogui.press('enter')  # Save image
             time.sleep(0.125)
             pyperclip.copy(pathToSaveImage.__str__())
-            pyautogui.moveTo(228, 52)  # Address bar
+            if browser == 'tor':
+                pyautogui.moveTo(228, 52)  # Address bar
+            else:
+                pyautogui.moveTo(574, 620)  # Address bar
             time.sleep(0.125)
             pyautogui.doubleClick()
             time.sleep(0.125)
             pyautogui.rightClick()
             time.sleep(0.125)
+            if browser == 'firefox':
+                pyautogui.press('down')
+                time.sleep(0.125)
             pyautogui.press('down')
             time.sleep(0.125)
             pyautogui.press('down')
@@ -214,7 +220,10 @@ while True:
             time.sleep(0.125)
             pyautogui.press('enter')  # Paste path to save image
             time.sleep(0.125)
-            pyautogui.moveTo(1792, 1056)
+            if browser == 'tor':
+                pyautogui.moveTo(1792, 1056)  # Clicking save button
+            else:
+                pyautogui.moveTo(1094, 707)
             time.sleep(0.125)
             pyautogui.click()
             time.sleep(0.125)
