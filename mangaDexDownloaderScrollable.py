@@ -91,7 +91,8 @@ def gapExists():
 
 
 if len(sys.argv) == MAXARGS:
-    _, browser, requestedURL = sys.argv
+    _, platform, requestedURL = sys.argv
+    platform = platform.lower()
 elif len(sys.argv) > MAXARGS:
     print('too many arguments!')
     exit()
@@ -99,10 +100,10 @@ else:
     print('not enough arguments!')
     exit()
 
-if browser.lower() == 'tor':
+if platform == 'linux':
     from tbselenium import tbdriver
     driver = tbdriver.TorBrowserDriver(Path.home() / 'tor-browser')
-elif browser.lower() == 'firefox':
+elif platform == 'windows':
     from selenium.webdriver import Firefox
     driver = Firefox()
 else:
@@ -200,7 +201,7 @@ while True:
             pyautogui.press('enter')  # Save image
             time.sleep(0.125)
             pyperclip.copy(pathToSaveImage.__str__())
-            if browser == 'tor':
+            if platform == 'linux':
                 pyautogui.moveTo(228, 52)  # Address bar
             else:
                 pyautogui.moveTo(574, 620)  # Address bar
@@ -209,7 +210,7 @@ while True:
             time.sleep(0.125)
             pyautogui.rightClick()
             time.sleep(0.125)
-            if browser == 'firefox':
+            if platform == 'windows':
                 pyautogui.press('down')
                 time.sleep(0.125)
             pyautogui.press('down')
@@ -220,7 +221,7 @@ while True:
             time.sleep(0.125)
             pyautogui.press('enter')  # Paste path to save image
             time.sleep(0.125)
-            if browser == 'tor':
+            if platform == 'linux':
                 pyautogui.moveTo(1792, 1056)  # Clicking save button
             else:
                 pyautogui.moveTo(1094, 707)
